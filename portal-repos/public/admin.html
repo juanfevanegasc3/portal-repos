@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Administrar repositorios</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="adm">
+  <h1>Administrar repositorios</h1>
+  <section><h2>Sitio</h2>
+    <div class="grid">
+      <div><label for="st">Título</label><input id="st"></div>
+      <div><label for="ss">Subtítulo</label><input id="ss"></div>
+    </div>
+  </section>
+  <section><h2>Cuentas</h2><div id="src"></div>
+    <button class="btn" id="addSrc">Agregar cuenta</button>
+  </section>
+  <section><h2>Módulos</h2><div id="mods"></div>
+    <button class="btn" id="addMod">Agregar módulo</button>
+  </section>
+  <section><h2>Repositorios</h2><div id="repos"></div></section>
+</div>
+<div class="bar">
+  <span class="msg" id="msg"></span>
+  <button class="btn" id="refresh">Volver a leer GitHub/GitLab</button>
+  <button class="btn primary" id="save">Guardar cambios</button>
+</div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+let tok = sessionStorage.getItem("t") || "", S = null;
+
+const say = (t) => ($("#msg").textContent = t);
+
+async function api(path, opt = {}) {
+  const r = await fetch(path, { ...opt, headers: { authorization: "Bearer " + tok, "content-type": "application/json" } });
+  if (r.status === 401) {
+    tok = prompt("Token de administrador") || "";
+    sessionStorage.setItem("t", tok);
+    return api(path, opt);
+  }
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function load(refresh) {
+  say("Cargando…");
+  S = await api("/api/admin/data" + (refresh ? "?refresh=1" : ""));
+  draw();
+  say(`${S.repos.length} repositorios leídos.`);
+}
+
+function draw() {
+  const c = S.config;
+  $("#st").value = c.site.title; $("#ss").value = c.site.subtitle;
+
+  $("#src").innerHTML = c.sources.map((s, i) => `<div class="line">
+    <select data-k="src" data-i="${i}" data-f="type"><option value="github"${s.type === "github" ? " selected" : ""}>GitHub</option><option value="gitlab"${s.type === "gitlab" ? " selected" : ""}>GitLab</option></select>
+    <input data-k="src" data-i="${i}" data-f="user" value="${esc(s.user)}" placeholder="usuario" aria-label="Usuario">
+    <input data-k="src" data-i="${i}" data-f="host" value="${esc(s.host)}" placeholder="gitlab.com (solo GitLab)" aria-label="Servidor">
+    <button class="btn" data-del="src" data-i="${i}">Quitar</button></div>`).join("");
+
+  $("#mods").innerHTML = c.modules.map((m, i) => `<div class="mline">
+    <input data-k="mod" data-i="${i}" data-f="name" value="${esc(m.name)}" placeholder="Nombre del módulo" aria-label="Nombre">
+    <input data-k="mod" data-i="${i}" data-f="description" value="${esc(m.description)}" placeholder="Descripción" aria-label="Descripción">
+    <button class="btn" data-up="${i}" aria-label="Subir">Subir</button>
+    <button class="btn" data-down="${i}" aria-label="Bajar">Bajar</button>
+    <button class="btn" data-del="mod" data-i="${i}">Quitar</button></div>`).join("");
+
+  const opts = (sel) => `<option value="">Sin módulo</option>` + c.modules.map((m) => `<option value="${esc(m.id)}"${m.id === sel ? " selected" : ""}>${esc(m.name || "(sin nombre)")}</option>`).join("");
+  $("#repos").innerHTML = S.repos.map((r, i) => `<div class="rrow">
+    <div><input data-k="repo" data-i="${i}" data-f="name" value="${esc(r.name)}" aria-label="Nombre">
+      <small>${r.provider === "gitlab" ? "GitLab" : "GitHub"} · original: ${esc(r.original.name)}${r.fork ? " · fork" : ""}</small></div>
+    <textarea data-k="repo" data-i="${i}" data-f="description" aria-label="Descripción">${esc(r.description)}</textarea>
+    <select data-k="repo" data-i="${i}" data-f="module" aria-label="Módulo">${opts(r.module)}</select>
+    <input type="number" data-k="repo" data-i="${i}" data-f="order" value="${r.order === 999 ? "" : r.order}" placeholder="Orden" aria-label="Orden">
+    <label class="chk"><input type="checkbox" data-k="repo" data-i="${i}" data-f="hidden"${r.hidden ? " checked" : ""}>Ocultar</label></div>`).join("")
+    || `<p>No se encontraron repositorios públicos. Revisa las cuentas y vuelve a leer.</p>`;
+}
+
+const slug = (t) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+document.addEventListener("change", (e) => {
+  const el = e.target, k = el.dataset.k;
+  if (!k) return;
+  const i = +el.dataset.i, f = el.dataset.f, c = S.config;
+  if (k === "src") c.sources[i][f] = el.value;
+  if (k === "mod") {
+    c.modules[i][f] = el.value;
+    if (f === "name" && !c.modules[i].id) c.modules[i].id = slug(el.value) || "m" + Date.now();
+    draw();
+  }
+  if (k === "repo") {
+    S.repos[i][f] = f === "hidden" ? el.checked : f === "order" ? (el.value === "" ? 999 : +el.value) : el.value;
+  }
+});
+
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  const c = S.config;
+  if (b.id === "addSrc") { c.sources.push({ type: "github", user: "", host: "" }); draw(); }
+  if (b.id === "addMod") { c.modules.push({ id: "m" + Date.now(), name: "", description: "" }); draw(); }
+  if (b.dataset.del === "src") { c.sources.splice(+b.dataset.i, 1); draw(); }
+  if (b.dataset.del === "mod") { c.modules.splice(+b.dataset.i, 1); draw(); }
+  if (b.dataset.up) { const i = +b.dataset.up; if (i > 0) { [c.modules[i - 1], c.modules[i]] = [c.modules[i], c.modules[i - 1]]; draw(); } }
+  if (b.dataset.down) { const i = +b.dataset.down; if (i < c.modules.length - 1) { [c.modules[i + 1], c.modules[i]] = [c.modules[i], c.modules[i + 1]]; draw(); } }
+});
+
+$("#refresh").onclick = () => load(true).catch((e) => say("Error: " + e.message));
+
+$("#save").onclick = async () => {
+  const c = S.config;
+  c.site = { title: $("#st").value, subtitle: $("#ss").value };
+  const overrides = {};
+  for (const r of S.repos) {
+    const o = {};
+    if (r.name && r.name !== r.original.name) o.name = r.name;
+    if (r.description && r.description !== r.original.description) o.description = r.description;
+    if (r.module) o.module = r.module;
+    if (r.order !== 999) o.order = r.order;
+    if (r.hidden !== r.fork) o.hidden = r.hidden;
+    if (Object.keys(o).length) overrides[r.id] = o;
+  }
+  try {
+    say("Guardando…");
+    await api("/api/admin/config", { method: "PUT", body: JSON.stringify({ ...c, overrides }) });
+    say("Cambios guardados. Ya son visibles en el portal.");
+  } catch (e) { say("No se pudo guardar: " + e.message); }
+};
+
+load(false).catch((e) => say("Error: " + e.message));
+</script>
+</body>
+</html>

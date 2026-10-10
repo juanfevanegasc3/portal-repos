@@ -1,0 +1,25 @@
+{
+	"name": "portal-repos",
+	"main": "src/index.js",
+	"compatibility_date": "2025-09-01",
+	"assets": {
+		"directory": "./public",
+		"binding": "ASSETS",
+		"run_worker_first": [
+			"/api/*"
+		]
+	},
+	// Crea el KV con: npx wrangler kv namespace create KV  y pega el id aquí
+	"kv_namespaces": [
+		{
+			"binding": "KV",
+			"id": "73e270a74ac14501aa34ff3b7fe6d9a1",
+			"remote": true
+		}
+	],
+	// Cuentas por defecto (luego las puedes cambiar desde /admin)
+	"vars": {
+		"GITHUB_USER": "juanfevanegasc3",
+		"GITLAB_USER": "juanfevanegasc3"
+	}
+}
