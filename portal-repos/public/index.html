@@ -306,8 +306,8 @@ fetch("/api/repos")
     document.title = $("#title").textContent;
     $("#sub").textContent = d.site.subtitle || "";
     if (d.site.subtitle) $("#sub").hidden = false;
-    $("#sideNote").innerHTML = D.modules.length
-      ? `${D.modules.length} módulos · ${D.repos.length} repositorios`
+    $("#sideNote").textContent = D.modules.length
+      ? `${plural(D.modules.length, "módulo", "módulos")} · ${plural(D.repos.length, "repositorio", "repositorios")}`
       : "";
     renderAccounts();
     render();
