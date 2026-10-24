@@ -58,9 +58,9 @@ async function loadRepos(env, cfg, refresh) {
       return {
         ...r,
         original: { name: r.name, description: r.description },
-        name: o.name || r.name,
-        description: o.description || r.description,
-        module: o.module || "",
+        name: o.name ?? r.name,
+        description: o.description ?? r.description,
+        module: o.module ?? "",
         order: Number.isFinite(o.order) ? o.order : 999,
         hidden: o.hidden ?? r.fork,
       };
@@ -83,9 +83,9 @@ function sanitize(b) {
   const overrides = {};
   for (const [id, o] of Object.entries(b.overrides || {}).slice(0, 500)) {
     overrides[str(id, 120)] = {
-      ...(o.name && { name: str(o.name, 120) }),
-      ...(o.description && { description: str(o.description, 600) }),
-      ...(o.module && { module: str(o.module, 60) }),
+      ...(o.name !== undefined && { name: str(o.name, 120) }),
+      ...(o.description !== undefined && { description: str(o.description, 600) }),
+      ...(o.module !== undefined && { module: str(o.module, 60) }),
       ...(Number.isFinite(o.order) && { order: o.order }),
       ...(typeof o.hidden === "boolean" && { hidden: o.hidden }),
     };
@@ -107,7 +107,17 @@ export default {
     if (pathname === "/api/repos") {
       const cfg = await getConfig(env);
       const repos = (await loadRepos(env, cfg, false)).filter((r) => !r.hidden && !r.archived);
-      return json({ site: cfg.site, modules: cfg.modules, repos });
+      const accounts = cfg.sources.map((s) => {
+        const host = (s.host || "gitlab.com").replace(/^https?:\/\//, "");
+        return {
+          type: s.type,
+          user: s.user,
+          url: s.type === "github"
+            ? `https://github.com/${encodeURIComponent(s.user)}`
+            : `https://${host}/${encodeURIComponent(s.user)}`,
+        };
+      });
+      return json({ site: cfg.site, modules: cfg.modules, repos, accounts });
     }
 
     if (pathname.startsWith("/api/admin/")) {

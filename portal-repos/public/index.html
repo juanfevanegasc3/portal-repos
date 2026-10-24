@@ -3,90 +3,323 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Portal que reúne los repositorios públicos de GitHub y GitLab, organizados por módulos y listos para explorar.">
 <title>Repositorios del curso</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/style.css">
+<script>
+  (function () {
+    try {
+      var saved = localStorage.getItem("theme");
+      var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (saved === "dark" || (!saved && dark)) document.documentElement.dataset.theme = "dark";
+      if (saved === "light") document.documentElement.dataset.theme = "light";
+    } catch (e) {}
+  })();
+</script>
 </head>
 <body>
-<header class="top">
-  <h1 id="title">Repositorios del curso</h1>
-  <p id="sub"></p>
+<a class="skip" href="#list">Saltar al listado</a>
+
+<header class="site-head">
+  <div class="head-inner">
+    <a class="brand" href="/" aria-label="Inicio del portal">
+      <span class="brand-mark" aria-hidden="true">&lt;/&gt;</span>
+      <span class="brand-text">Portal de repositorios</span>
+    </a>
+    <div class="head-actions">
+      <nav class="accounts" id="accounts" aria-label="Perfiles de código"></nav>
+      <button class="icon-btn" id="theme" type="button" aria-label="Cambiar a tema oscuro" title="Cambiar tema">
+        <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7"/></svg>
+        <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.2A8.6 8.6 0 0 1 9.8 3.5a8.7 8.7 0 1 0 10.7 10.7Z"/></svg>
+      </button>
+    </div>
+  </div>
 </header>
-<div class="shell">
-  <nav class="mods" id="mods" aria-label="Módulos"></nav>
-  <main>
-    <input class="search" id="q" type="search" placeholder="Buscar por nombre, descripción o lenguaje" aria-label="Buscar repositorios">
-    <div id="list" aria-live="polite"></div>
-  </main>
-</div>
+
+<main class="page">
+  <section class="hero">
+    <p class="eyebrow"><span aria-hidden="true"></span>Código abierto del curso</p>
+    <h1 id="title">Repositorios del curso</h1>
+    <p class="lede" id="sub"></p>
+    <ul class="stats" aria-label="Resumen del portal">
+      <li><strong id="statRepos">—</strong><span id="statReposL">repositorios</span></li>
+      <li><strong id="statMods">—</strong><span id="statModsL">módulos</span></li>
+      <li><strong id="statLangs">—</strong><span id="statLangsL">lenguajes</span></li>
+    </ul>
+  </section>
+
+  <div class="toolbar">
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+      <input id="q" type="search" placeholder="Buscar por nombre, descripción, tema o lenguaje" aria-label="Buscar repositorios" autocomplete="off" spellcheck="false">
+      <kbd class="hint" aria-hidden="true">/</kbd>
+    </div>
+    <label class="sort">
+      <span>Ordenar por</span>
+      <select id="sort">
+        <option value="order">Destacados</option>
+        <option value="recent">Más recientes</option>
+        <option value="name">Nombre (A–Z)</option>
+        <option value="stars">Más estrellas</option>
+      </select>
+    </label>
+  </div>
+
+  <p class="count" id="count" aria-live="polite"></p>
+
+  <div class="shell">
+    <aside class="side">
+      <nav class="mods" id="mods" aria-label="Módulos"></nav>
+      <p class="side-note" id="sideNote"></p>
+    </aside>
+    <section class="content" aria-label="Repositorios">
+      <div id="list" aria-live="polite"></div>
+    </section>
+  </div>
+</main>
+
+<footer class="foot">
+  <p>Repositorios públicos de GitHub y GitLab, organizados para el curso.</p>
+  <p class="foot-meta"><span id="footYear"></span> · Actualizado automáticamente cada 30 minutos</p>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
 <script>
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-let D = { modules: [], repos: [] }, mod = "all", q = "";
+const safeUrl = (u) => (/^https?:\/\//.test(u) ? u : "#");
+
+const LANGS = {
+  javascript: "#f1e05a", typescript: "#3178c6", html: "#e34c26", css: "#663399",
+  python: "#3572a5", java: "#b07219", "c#": "#178600", "c++": "#f34b7d", c: "#555555",
+  php: "#4f5d95", ruby: "#701516", go: "#00add8", rust: "#dea584", kotlin: "#a97bff",
+  swift: "#f05138", dart: "#00b4ab", shell: "#89e051", vue: "#41b883", svelte: "#ff3e00",
+  scss: "#c6538c", "jupyter notebook": "#da5b0b", lua: "#000080", r: "#198ce7",
+  powershell: "#012456", dockerfile: "#384d54", makefile: "#427819", perl: "#0298c3",
+  haskell: "#5e5086", elixir: "#6e4a7e", scala: "#c22d40", "objective-c": "#438eff",
+};
+const langColor = (l) => LANGS[String(l).toLowerCase()] || "#8b97a8";
 
 const fmt = (d) => d ? new Date(d).toLocaleDateString("es", { month: "short", year: "numeric" }) : "";
-const safeUrl = (u) => /^https?:\/\//.test(u) ? u : "#";
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+let D = { accounts: [], modules: [], repos: [] }, mod = "all", q = "", sort = "order";
 
-function row(r) {
-  return `<article class="row">
-    <div>
-      <h3>${esc(r.name)}</h3>
-      <p>${esc(r.description) || "Sin descripción."}</p>
-      <div class="meta">
-        ${r.language ? `<span><i class="dot"></i>${esc(r.language)}</span>` : ""}
-        <span>${r.provider === "gitlab" ? "GitLab" : "GitHub"}</span>
-        ${r.updated ? `<span>Actualizado ${fmt(r.updated)}</span>` : ""}
-        ${r.stars ? `<span>${r.stars} estrellas</span>` : ""}
-      </div>
+function skeleton() {
+  $("#list").innerHTML = `<section class="group"><div class="group-head"><span class="sk sk-title"></span></div><div class="cards">${
+    Array.from({ length: 4 }, () => `<article class="card is-skeleton"><span class="sk sk-line w40"></span><span class="sk sk-line"></span><span class="sk sk-line w70"></span><span class="sk sk-line w55"></span></article>`).join("")
+  }</div></section>`;
+}
+
+function repoMatches(r, term) {
+  if (!term) return true;
+  return [r.name, r.description, r.language, ...(r.topics || [])].join(" ").toLowerCase().includes(term);
+}
+
+function sorted(items) {
+  const a = [...items];
+  if (sort === "name") return a.sort((x, y) => x.name.localeCompare(y.name, "es", { sensitivity: "base" }));
+  if (sort === "stars") return a.sort((x, y) => (y.stars || 0) - (x.stars || 0) || x.name.localeCompare(y.name, "es"));
+  if (sort === "recent") return a.sort((x, y) => String(y.updated).localeCompare(String(x.updated)));
+  return a.sort((x, y) => x.order - y.order || String(y.updated).localeCompare(String(x.updated)));
+}
+
+function card(r) {
+  const topics = (r.topics || []).slice(0, 4);
+  const host = r.provider === "gitlab" ? "GitLab" : "GitHub";
+  return `<article class="card">
+    <div class="card-head">
+      <h3><a href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener">${esc(r.name)}</a></h3>
+      <span class="prov ${r.provider}" title="${host}">${host}</span>
+    </div>
+    <p class="desc">${esc(r.description) || "Sin descripción."}</p>
+    ${topics.length ? `<ul class="tags">${topics.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
+    <div class="meta">
+      ${r.language ? `<span class="lang"><i style="background:${langColor(r.language)}"></i>${esc(r.language)}</span>` : ""}
+      ${r.stars ? `<span class="star" title="${r.stars} estrellas">★ ${r.stars}</span>` : ""}
+      ${r.updated ? `<span>Actualizado ${fmt(r.updated)}</span>` : ""}
     </div>
     <div class="acts">
-      <button class="btn" data-clone="${esc(r.clone)}">Copiar git clone</button>
-      <a class="btn primary" href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener">Ver código</a>
+      <button class="btn" type="button" data-clone="${esc(r.clone || "")}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+        Copiar git clone
+      </button>
+      <a class="btn primary" href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener">
+        Abrir repositorio
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>
+      </a>
     </div>
   </article>`;
 }
 
 function render() {
   const term = q.trim().toLowerCase();
-  const repos = D.repos.filter((r) => !term || [r.name, r.description, r.language].join(" ").toLowerCase().includes(term));
+  const visible = D.repos.filter((r) => repoMatches(r, term));
   const known = new Set(D.modules.map((m) => m.id));
   const modOf = (r) => (known.has(r.module) ? r.module : "");
-  const groups = [...D.modules.map((m) => ({ ...m })), { id: "", name: "Otros", description: "" }]
-    .map((g) => ({ ...g, items: repos.filter((r) => modOf(r) === g.id) }))
+
+  const groups = [...D.modules, { id: "", name: "Otros", description: "Repositorios que aún no tienen un módulo asignado." }]
+    .map((g) => ({ ...g, items: sorted(visible.filter((r) => modOf(r) === g.id)) }))
     .filter((g) => g.items.length);
 
-  $("#mods").innerHTML = [`<button data-m="all" aria-current="${mod === "all"}"><span>Todos</span><span>${D.repos.length}</span></button>`]
-    .concat(D.modules.concat([{ id: "", name: "Otros" }]).map((m) => {
-      const n = D.repos.filter((r) => modOf(r) === m.id).length;
-      return n ? `<button data-m="${esc(m.id)}" aria-current="${mod === m.id}"><span>${esc(m.name)}</span><span>${n}</span></button>` : "";
-    })).join("");
+  $("#mods").innerHTML = [
+    `<button type="button" data-m="all" aria-current="${mod === "all"}"><span>Todos</span><span class="n">${visible.length}</span></button>`,
+  ].concat(D.modules.concat([{ id: "", name: "Otros" }]).map((m) => {
+    const n = visible.filter((r) => modOf(r) === m.id).length;
+    return n ? `<button type="button" data-m="${esc(m.id)}" aria-current="${mod === m.id}"><span>${esc(m.name)}</span><span class="n">${n}</span></button>` : "";
+  })).join("");
 
   const shown = groups.filter((g) => mod === "all" || g.id === mod);
+  const total = visible.length;
+  const moduleCount = D.modules.filter((m) => visible.some((r) => r.module === m.id)).length;
+
+  $("#count").textContent = term
+    ? `${plural(total, "resultado", "resultados")} para “${q.trim()}”`
+    : `${plural(total, "repositorio", "repositorios")} · ${plural(moduleCount, "módulo", "módulos")}`;
+
   $("#list").innerHTML = shown.length
-    ? shown.map((g) => `<section class="group"><h2>${esc(g.name)}</h2>${g.description ? `<p>${esc(g.description)}</p>` : ""}<div class="rows">${g.items.map(row).join("")}</div></section>`).join("")
-    : `<p class="empty">No hay repositorios que coincidan con la búsqueda.</p>`;
+    ? shown.map((g) => `<section class="group">
+        <div class="group-head">
+          <div>
+            <h2>${esc(g.name)}</h2>
+            ${g.description ? `<p>${esc(g.description)}</p>` : ""}
+          </div>
+          <span class="badge">${g.items.length}</span>
+        </div>
+        <div class="cards">${g.items.map(card).join("")}</div>
+      </section>`).join("")
+    : `<div class="empty">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+        <h2>Sin resultados</h2>
+        <p>No encontramos repositorios con esos filtros. Prueba con otra palabra.</p>
+        <button class="btn" id="reset" type="button">Limpiar búsqueda</button>
+      </div>`;
+
+  const totalRepos = D.repos.length;
+  const totalMods = D.modules.filter((m) => D.repos.some((r) => r.module === m.id)).length;
+  const totalLangs = new Set(D.repos.map((r) => r.language).filter(Boolean)).size;
+  $("#statRepos").textContent = totalRepos;
+  $("#statMods").textContent = totalMods;
+  $("#statLangs").textContent = totalLangs;
+  $("#statReposL").textContent = totalRepos === 1 ? "repositorio" : "repositorios";
+  $("#statModsL").textContent = totalMods === 1 ? "módulo" : "módulos";
+  $("#statLangsL").textContent = totalLangs === 1 ? "lenguaje" : "lenguajes";
+}
+
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+async function copy(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
 }
 
 document.addEventListener("click", async (e) => {
   const m = e.target.closest("[data-m]");
-  if (m) { mod = m.dataset.m; render(); }
-  const c = e.target.closest("[data-clone]");
-  if (c) {
-    await navigator.clipboard.writeText(`git clone ${c.dataset.clone}`);
-    const t = c.textContent; c.textContent = "Copiado"; setTimeout(() => (c.textContent = t), 1500);
-  }
-});
-$("#q").addEventListener("input", (e) => { q = e.target.value; render(); });
+  if (m) { mod = m.dataset.m; render(); return; }
 
-fetch("/api/repos").then((r) => r.json()).then((d) => {
-  D = d;
-  $("#title").textContent = d.site.title || "Repositorios del curso";
-  document.title = $("#title").textContent;
-  $("#sub").textContent = d.site.subtitle || "";
-  render();
-}).catch(() => { $("#list").innerHTML = `<p class="empty">No se pudieron cargar los repositorios. Recarga la página en unos minutos.</p>`; });
+  const c = e.target.closest("[data-clone]");
+  if (c && c.dataset.clone) {
+    await copy(`git clone ${c.dataset.clone}`);
+    toast("Comando git clone copiado");
+    c.classList.add("done");
+    setTimeout(() => c.classList.remove("done"), 1200);
+    return;
+  }
+
+  if (e.target.closest("#reset")) {
+    q = "";
+    $("#q").value = "";
+    mod = "all";
+    render();
+    $("#q").focus();
+    return;
+  }
+
+  if (e.target.closest("#theme")) return toggleTheme();
+});
+
+$("#q").addEventListener("input", (e) => { q = e.target.value; render(); });
+$("#sort").addEventListener("change", (e) => { sort = e.target.value; render(); });
+
+document.addEventListener("keydown", (e) => {
+  const typing = /^(input|textarea|select)$/i.test(document.activeElement.tagName);
+  if (e.key === "/" && !typing) { e.preventDefault(); $("#q").focus(); }
+  if (e.key === "Escape" && document.activeElement === $("#q")) { $("#q").value = ""; q = ""; render(); $("#q").blur(); }
+});
+
+function toggleTheme() {
+  const current = document.documentElement.dataset.theme
+    || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  const next = current === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("theme", next); } catch (e) {}
+  syncThemeButton();
+}
+
+function syncThemeButton() {
+  const dark = (document.documentElement.dataset.theme
+    || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark";
+  $("#theme").setAttribute("aria-label", dark ? "Cambiar a tema claro" : "Cambiar a tema oscuro");
+}
+
+function renderAccounts() {
+  $("#accounts").innerHTML = D.accounts.map((a) => {
+    const label = a.type === "gitlab" ? "GitLab" : "GitHub";
+    return `<a class="account" href="${esc(safeUrl(a.url))}" target="_blank" rel="noopener" title="${label} · ${esc(a.user)}">
+      <span class="account-dot ${a.type}" aria-hidden="true"></span>${label}</a>`;
+  }).join("");
+}
+
+$("#footYear").textContent = new Date().getFullYear();
+syncThemeButton();
+skeleton();
+
+fetch("/api/repos")
+  .then((r) => {
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  })
+  .then((d) => {
+    D = { accounts: d.accounts || [], modules: d.modules || [], repos: d.repos || [] };
+    $("#title").textContent = d.site.title || "Repositorios del curso";
+    document.title = $("#title").textContent;
+    $("#sub").textContent = d.site.subtitle || "";
+    if (d.site.subtitle) $("#sub").hidden = false;
+    $("#sideNote").innerHTML = D.modules.length
+      ? `${D.modules.length} módulos · ${D.repos.length} repositorios`
+      : "";
+    renderAccounts();
+    render();
+  })
+  .catch(() => {
+    $("#count").textContent = "";
+    $("#list").innerHTML = `<div class="empty">
+      <h2>No se pudo cargar el portal</h2>
+      <p>Estamos leyendo GitHub y GitLab. Recarga la página en unos minutos.</p>
+      <button class="btn" onclick="location.reload()">Reintentar</button>
+    </div>`;
+  });
 </script>
 </body>
 </html>
